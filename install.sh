@@ -8,6 +8,6 @@ npm install
 mkdir -p "${HOME}/.config/opencode/plugins"
 ln -sfn "$ROOT" "${HOME}/.config/opencode/plugins/opencode-stt"
 
-echo "Plugin instalado em ~/.config/opencode/plugins/opencode-stt"
-echo "Abra o OpenCode e rode /stt-config para escolher o provedor e colar a API key."
-echo "Depois use ctrl+alt+v para ditar."
+echo "Plugin installed at ~/.config/opencode/plugins/opencode-stt"
+echo "Open OpenCode and run /stt-config to choose the provider and paste the API key."
+echo "Then use ctrl+alt+v to dictate."

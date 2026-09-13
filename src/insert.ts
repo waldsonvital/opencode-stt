@@ -10,7 +10,7 @@ import type { Context } from "@opencode/plugin/tui/plugin";
  *  4. restoring the original clipboard once the TUI has had time to read it.
  *
  * The save/restore dance keeps secrets copied to the clipboard before the
- * ditado from being clobbered.
+ * dictation from being clobbered.
  */
 export async function appendViaClipboard(ctx: Context, text: string): Promise<void> {
   const saved = await run("wl-paste", ["--no-newline"]);
