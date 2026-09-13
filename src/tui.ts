@@ -1,6 +1,5 @@
 // Importing from `@opencode/plugin/tui/plugin` instead of `@opencode/plugin/tui`
-// skips the `solid.js` re-export, so this plugin does not drag solid-js into
-// the dependency graph when it never renders JSX.
+// keeps `define` without the host's solid re-export; JSX lives in status.tsx.
 import { define } from "@opencode/plugin/tui/plugin";
 import type { Context } from "@opencode/plugin/tui/plugin";
 import { unlink } from "node:fs/promises";
@@ -8,7 +7,8 @@ import { startRecording, type Recorder } from "./recorder.ts";
 import { appendViaClipboard, submitDirect } from "./insert.ts";
 import { createMiniMax } from "./providers/minimax.ts";
 import { createOpenAICompat } from "./providers/openai-compat.ts";
-import { createCore, type ProviderResult } from "./core.ts";
+import { createCore, type ProviderResult, type SttPhase } from "./core.ts";
+import { renderAsrStatus } from "./status.tsx";
 
 interface PluginOptions {
   readonly provider?: "minimax" | "openai-compat";
@@ -27,6 +27,13 @@ type Language = (typeof LANGUAGES)[number];
 interface RecordingState {
   recorder: Recorder | null;
 }
+
+interface StatusState {
+  phase: SttPhase;
+  spin: number;
+}
+
+const SUCCESS_MS = 2500;
 
 export default define({
   id: "opencode-stt",
@@ -47,6 +54,44 @@ export default define({
     const [stateStore, mutateState] = context.storage.memory("recording", {
       initial: { recorder: null } as RecordingState,
     });
+    const [statusStore, mutateStatus] = context.storage.memory("stt-status", {
+      initial: { phase: "idle", spin: 0 } as StatusState,
+    });
+    // Memory store survives hot reload; drop a leftover chip from the previous generation.
+    mutateStatus((draft) => {
+      draft.phase = "idle";
+      draft.spin = 0;
+    });
+
+    let successTimer: ReturnType<typeof setTimeout> | undefined;
+    let spinTimer: ReturnType<typeof setInterval> | undefined;
+    const clearStatusTimers = () => {
+      clearTimeout(successTimer);
+      clearInterval(spinTimer);
+      successTimer = undefined;
+      spinTimer = undefined;
+    };
+    const setPhase = (phase: SttPhase) => {
+      clearStatusTimers();
+      mutateStatus((draft) => {
+        draft.phase = phase;
+        if (phase === "transcribing") draft.spin = 0;
+      });
+      if (phase === "transcribing") {
+        spinTimer = setInterval(() => {
+          mutateStatus((draft) => {
+            draft.spin += 1;
+          });
+        }, 80);
+      } else if (phase === "success") {
+        successTimer = setTimeout(() => {
+          successTimer = undefined;
+          mutateStatus((draft) => {
+            if (draft.phase === "success") draft.phase = "idle";
+          });
+        }, SUCCESS_MS);
+      }
+    };
 
     const toast = (message: string, variant: "info" | "success" | "warning" | "error" = "info", duration = 3000) =>
       context.ui.toast.show({ message, variant, duration });
@@ -107,6 +152,7 @@ export default define({
           draft.recorder = rec;
         });
       },
+      setPhase,
     });
 
     // setup runs OUTSIDE Solid's <Keymap.Provider> in OpenCode 2.0.3, so
@@ -208,10 +254,25 @@ export default define({
       },
     });
 
+    // Do not `replace` this slot: it would suppress the host effort indicator.
+    context.ui.slot({
+      append: "prompt.footer.status",
+      render: () =>
+        renderAsrStatus(statusStore, {
+          recording: context.theme.text.feedback.error.default,
+          success: context.theme.text.feedback.success.default,
+        }),
+    });
+
     // Reap any ffmpeg process this generation owns, and also any orphan a
     // previous generation left in the shared memory store (hot reload or TUI
     // shutdown). cancel() is a no-op when there is no active recorder.
     return () => {
+      clearStatusTimers();
+      mutateStatus((draft) => {
+        draft.phase = "idle";
+        draft.spin = 0;
+      });
       core.cancel();
       const orphan = stateStore.recorder;
       if (orphan) {

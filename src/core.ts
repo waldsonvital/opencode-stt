@@ -9,6 +9,8 @@ export type ProviderResult =
 
 export type ToastVariant = "info" | "success" | "warning" | "error";
 
+export type SttPhase = "idle" | "recording" | "transcribing" | "success";
+
 export interface CoreDeps {
   readonly startRecording: () => Promise<Recorder>;
   readonly getProvider: () => ProviderResult;
@@ -18,6 +20,8 @@ export interface CoreDeps {
   readonly toast: (message: string, variant?: ToastVariant, duration?: number) => void;
   /** Mirrors the active recorder into the host's persistent memory store. */
   readonly persistRecorder: (rec: Recorder | null) => void;
+  /** Drives the TUI status chip. Optional so tests that ignore it stay valid. */
+  readonly setPhase?: (phase: SttPhase) => void;
 }
 
 export interface CoreHandle {
@@ -40,6 +44,7 @@ export function createCore(deps: CoreDeps): CoreHandle {
   // ponytail: per-generation; a TUI hot reload drops the in-flight toggle
   // (recorder process persists in storage and is reaped at teardown).
   let busy = false;
+  const setPhase = (phase: SttPhase) => deps.setPhase?.(phase);
 
   const startToggle = async (mode: Mode): Promise<void> => {
     if (busy) {
@@ -59,6 +64,7 @@ export function createCore(deps: CoreDeps): CoreHandle {
       const rec = await deps.startRecording();
       recorder = rec;
       deps.persistRecorder(rec);
+      setPhase("recording");
       deps.toast(
         mode === "append"
           ? "Gravando… ctrl+alt+v para transcrever e inserir."
@@ -67,6 +73,7 @@ export function createCore(deps: CoreDeps): CoreHandle {
         3000,
       );
     } catch (e) {
+      setPhase("idle");
       deps.toast(
         `Não foi possível iniciar a gravação: ${e instanceof Error ? e.message : String(e)}`,
         "error",
@@ -81,8 +88,10 @@ export function createCore(deps: CoreDeps): CoreHandle {
     busy = true;
     const rec = recorder;
     recorder = null;
+    let succeeded = false;
     try {
       deps.persistRecorder(null);
+      setPhase("transcribing");
       const prov = deps.getProvider();
       if (!prov.ok) {
         deps.toast(prov.error, "error", 5000);
@@ -106,6 +115,8 @@ export function createCore(deps: CoreDeps): CoreHandle {
           await deps.insertSubmit(res.text);
           deps.toast("Prompt enviado.", "success");
         }
+        succeeded = true;
+        setPhase("success");
       } catch (e) {
         await deps.cleanupFile(path);
         const msg = e instanceof SttError ? e.message : e instanceof Error ? e.message : String(e);
@@ -113,6 +124,7 @@ export function createCore(deps: CoreDeps): CoreHandle {
       }
     } finally {
       busy = false;
+      if (!succeeded) setPhase("idle");
     }
   };
 
@@ -121,6 +133,7 @@ export function createCore(deps: CoreDeps): CoreHandle {
     recorder.cancel();
     recorder = null;
     deps.persistRecorder(null);
+    setPhase("idle");
     return true;
   };
 

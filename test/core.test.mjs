@@ -60,6 +60,7 @@ function makeRecordingDeps({ recorder, provider, insertDelayMs = 80 } = {}) {
       },
       toast: (msg, variant = "info") => events.push(`toast:${variant}:${msg}`),
       persistRecorder: (rec) => events.push(rec ? "persist:set" : "persist:null"),
+      setPhase: (phase) => events.push(`phase:${phase}`),
     },
   };
 }
@@ -74,6 +75,7 @@ test("startToggle: first call starts recording and persists to state", async () 
 
   assert.equal(events.filter((e) => e === "start").length, 1);
   assert.equal(events.filter((e) => e === "persist:set").length, 1);
+  assert.deepEqual(events.filter((e) => e.startsWith("phase:")), ["phase:recording"]);
   assert.ok(core.hasRecorder(), "core should own a recorder after start");
   assert.equal(rec.started, false);  // startRecording mock doesn't set this
   assert.ok(
@@ -114,6 +116,11 @@ test("startToggle reentrance: second call during transcribe is a no-op", async (
   assert.deepEqual(inserts, ["ola"]);
   assert.equal(events.filter((e) => e === "insert:done:ola").length, 1);
   assert.equal(events.filter((e) => e === "start").length, 1);
+  assert.deepEqual(events.filter((e) => e.startsWith("phase:")), [
+    "phase:recording",
+    "phase:transcribing",
+    "phase:success",
+  ]);
   assert.equal(core.hasRecorder(), false);
   // The concurrent no-op should surface as a warning toast.
   assert.ok(
@@ -145,6 +152,7 @@ test("startToggle reentrance: rapid double-tap during spawn does not leak state"
     cleanupFile: async () => {},
     toast: (msg, variant = "info") => events.push(`toast:${variant}:${msg}`),
     persistRecorder: (rec) => events.push(rec ? "persist:set" : "persist:null"),
+    setPhase: (phase) => events.push(`phase:${phase}`),
   };
 
   const core = createCore(deps);
@@ -186,6 +194,11 @@ test("startToggle: finalize transcribe error surfaces as STT error toast", async
     events.some((e) => e === "toast:error:STT falhou: upstream boom"),
     "expected the failure toast with SttError message",
   );
+  assert.deepEqual(events.filter((e) => e.startsWith("phase:")), [
+    "phase:recording",
+    "phase:transcribing",
+    "phase:idle",
+  ]);
   assert.equal(core.hasRecorder(), false);
 });
 
@@ -200,6 +213,11 @@ test("startToggle: no-speech result shows warning and skips insert", async () =>
 
   assert.deepEqual(inserts, []);
   assert.ok(events.some((e) => e === "toast:warning:Nenhuma fala detectada."));
+  assert.deepEqual(events.filter((e) => e.startsWith("phase:")), [
+    "phase:recording",
+    "phase:transcribing",
+    "phase:idle",
+  ]);
 });
 
 test("core.cancel: reaps recorder and is idempotent", async () => {
@@ -215,7 +233,27 @@ test("core.cancel: reaps recorder and is idempotent", async () => {
   assert.equal(rec.canceled, true);
   assert.equal(core.hasRecorder(), false);
   assert.equal(core.isBusy(), false, "core is idle after cancel");
+  assert.deepEqual(events.filter((e) => e.startsWith("phase:")), ["phase:recording", "phase:idle"]);
   // Idempotent: a second cancel is a no-op.
   assert.equal(core.cancel(), false);
-  void events;
+});
+
+test("startToggle: recording start failure goes idle, never recording/success", async () => {
+  const events = [];
+  const deps = {
+    startRecording: async () => {
+      throw new Error("no mic");
+    },
+    getProvider: () => ({ ok: true, provider: makeFakeProvider(), language: "pt" }),
+    insertAppend: async () => {},
+    insertSubmit: async () => {},
+    cleanupFile: async () => {},
+    toast: (msg, variant = "info") => events.push(`toast:${variant}:${msg}`),
+    persistRecorder: () => {},
+    setPhase: (phase) => events.push(`phase:${phase}`),
+  };
+  const core = createCore(deps);
+  await core.startToggle("append");
+  assert.deepEqual(events.filter((e) => e.startsWith("phase:")), ["phase:idle"]);
+  assert.equal(core.hasRecorder(), false);
 });

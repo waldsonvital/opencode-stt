@@ -12,6 +12,8 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
     "types": ["node"]
   },
   "include": ["src/**/*", "tui.ts"]
