@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "description": "OpenCode V2 plugin: speech-to-text via clipboard append or direct submit.",
+  "license": "MIT",
+  "author": "Waldson Vital",
   "exports": {
     ".": "./src/index.ts",
     "./tui": "./src/tui.ts"

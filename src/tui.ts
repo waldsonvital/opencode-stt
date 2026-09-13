@@ -9,17 +9,16 @@ import { createMiniMax } from "./providers/minimax.ts";
 import { createOpenAICompat } from "./providers/openai-compat.ts";
 import { createCore, type ProviderResult, type SttPhase } from "./core.ts";
 import { renderAsrStatus } from "./status.tsx";
-
-interface PluginOptions {
-  readonly provider?: "minimax" | "openai-compat";
-  readonly apiKeyEnv?: string;
-  readonly language?: string;
-  readonly openai?: {
-    readonly baseUrl?: string;
-    readonly model?: string;
-    readonly apiKeyEnv?: string;
-  };
-}
+import {
+  configFromPreset,
+  readSecretsSync,
+  resolveRuntime,
+  seedFromOptions,
+  writeSecret,
+  type PluginOptions,
+  type PresetId,
+  type ProviderConfig,
+} from "./config.ts";
 
 const LANGUAGES = ["pt", "en", "es", "auto"] as const;
 type Language = (typeof LANGUAGES)[number];
@@ -35,14 +34,75 @@ interface StatusState {
 
 const SUCCESS_MS = 2500;
 
+type Dialog = Context["ui"]["dialog"];
+
+async function promptCustomProvider(dialog: Dialog): Promise<ProviderConfig | undefined> {
+  const baseUrl = await dialog.prompt({
+    title: "Base URL",
+    description: "Sem barra final e sem /audio/transcriptions. Ex.: http://localhost:1234/v1",
+    placeholder: "https://api.openai.com/v1",
+  });
+  if (baseUrl === undefined) return;
+  const model = await dialog.prompt({
+    title: "Modelo",
+    placeholder: "whisper-1",
+  });
+  if (model === undefined) return;
+  const envName = await dialog.prompt({
+    title: "Nome da variável de ambiente da API key",
+    value: "OPENAI_API_KEY",
+  });
+  if (envName === undefined) return;
+  const trimmedUrl = baseUrl.trim().replace(/\/$/, "");
+  const trimmedModel = model.trim();
+  if (!trimmedUrl || !trimmedModel) return;
+  return {
+    presetId: "other",
+    provider: "openai-compat",
+    apiKeyEnv: envName.trim() || "OPENAI_API_KEY",
+    baseUrl: trimmedUrl,
+    model: trimmedModel,
+    label: "Outro",
+  };
+}
+
+async function runConfigWizard(
+  dialog: Dialog,
+  current: ProviderConfig,
+): Promise<{ config: ProviderConfig; apiKey: string } | undefined> {
+  const picked = await dialog.select<PresetId>({
+    title: "Provedor de transcrição",
+    current: current.presetId,
+    options: [
+      { value: "minimax", title: "MiniMax (padrão)" },
+      { value: "openai", title: "OpenAI Whisper" },
+      { value: "groq", title: "Groq" },
+      { value: "other", title: "Outro (OpenAI-compatible)" },
+    ],
+  });
+  if (!picked) return;
+
+  const config = picked === "other" ? await promptCustomProvider(dialog) : configFromPreset(picked);
+  if (!config) return;
+
+  // dialog.prompt has no mask — the key is visible on screen.
+  const apiKey = await dialog.prompt({
+    title: "API key",
+    description:
+      "O texto aparece neste dialog (sem máscara) e será gravado em ~/.config/opencode/opencode-stt.secrets.json com permissão 600.",
+    placeholder: "cole a chave",
+  });
+  if (apiKey === undefined) return;
+  const trimmed = apiKey.trim();
+  if (!trimmed) return;
+  return { config, apiKey: trimmed };
+}
+
 export default define({
   id: "opencode-stt",
 
   async setup(context: Context) {
     const opts = (context.options ?? {}) as PluginOptions;
-    const providerId = opts.provider ?? "minimax";
-    const apiKeyEnv = opts.apiKeyEnv ?? "MINIMAX_API_KEY";
-    const openaiApiKeyEnv = opts.openai?.apiKeyEnv ?? "OPENAI_API_KEY";
     const initialLang: Language =
       opts.language && (LANGUAGES as readonly string[]).includes(opts.language)
         ? (opts.language as Language)
@@ -50,6 +110,9 @@ export default define({
 
     const [langStore, mutateLang] = context.storage.store("language", {
       initial: { value: initialLang },
+    });
+    const [providerStore, mutateProvider] = context.storage.store("provider", {
+      initial: seedFromOptions(opts),
     });
     const [stateStore, mutateState] = context.storage.memory("recording", {
       initial: { recorder: null } as RecordingState,
@@ -101,34 +164,23 @@ export default define({
       return v === "auto" ? undefined : v;
     };
 
+    // Call-time: core invokes this on finalize, so read store + secrets now.
     const getProvider = (): ProviderResult => {
-      if (providerId === "minimax") {
-        const key = process.env[apiKeyEnv];
-        if (!key) return { ok: false, error: `Defina a variável de ambiente ${apiKeyEnv}.` };
-        return { ok: true, provider: createMiniMax({ apiKey: key }), language: currentLanguage() };
-      }
-      if (providerId === "openai-compat") {
-        const key = process.env[openaiApiKeyEnv];
-        if (!key) return { ok: false, error: `Defina a variável de ambiente ${openaiApiKeyEnv}.` };
-        const baseUrl = opts.openai?.baseUrl;
-        const model = opts.openai?.model;
-        if (!baseUrl || !model) {
-          return {
-            ok: false,
-            error: "openai.baseUrl e openai.model são obrigatórios para provider=openai-compat.",
-          };
-        }
-        return {
-          ok: true,
-          provider: createOpenAICompat({ baseUrl, model, apiKey: key }),
-          // ponytail: most OpenAI-compat servers ignore the language hint,
-          // and the openai-compat provider discards it anyway — skip the wire.
-          language: undefined,
-        };
+      const resolved = resolveRuntime(providerStore, opts, process.env, readSecretsSync());
+      if (!resolved.ok) return { ok: false, error: resolved.error };
+      if (resolved.provider === "minimax") {
+        return { ok: true, provider: createMiniMax({ apiKey: resolved.apiKey }), language: currentLanguage() };
       }
       return {
-        ok: false,
-        error: `Provider "${providerId}" desconhecido. Suportados: minimax, openai-compat.`,
+        ok: true,
+        provider: createOpenAICompat({
+          baseUrl: resolved.baseUrl,
+          model: resolved.model,
+          apiKey: resolved.apiKey,
+        }),
+        // ponytail: most OpenAI-compat servers ignore the language hint,
+        // and the openai-compat provider discards it anyway — skip the wire.
+        language: undefined,
       };
     };
 
@@ -228,6 +280,33 @@ export default define({
                   });
                   toast(`Idioma: ${picked}`, "success", 1500);
                 }
+              },
+            },
+            {
+              id: "stt.config",
+              title: "STT: configurar provedor",
+              description: "Escolhe o provedor de transcrição e grava a API key.",
+              group: "opencode-stt",
+              palette: true,
+              slash: { name: "stt-config" },
+              run: async () => {
+                const result = await runConfigWizard(context.ui.dialog, providerStore);
+                if (!result) return;
+                try {
+                  await writeSecret(result.config.apiKeyEnv, result.apiKey);
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Falha ao gravar a chave.", "error", 5000);
+                  return;
+                }
+                await mutateProvider((draft) => {
+                  draft.presetId = result.config.presetId;
+                  draft.provider = result.config.provider;
+                  draft.apiKeyEnv = result.config.apiKeyEnv;
+                  draft.baseUrl = result.config.baseUrl;
+                  draft.model = result.config.model;
+                  draft.label = result.config.label;
+                });
+                toast(`Provedor: ${result.config.label}`, "success");
               },
             },
             {

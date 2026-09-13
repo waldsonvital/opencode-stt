@@ -1,179 +1,196 @@
 # opencode-stt
 
-Plugin CLI para **OpenCode V2** que adiciona ditado (speech-to-text) direto no
-composer. Provider-agnostic: suporta **MiniMax** e qualquer servidor
-**OpenAI-compatible** (Groq, OpenAI Whisper, LM Studio etc.).
+Plugin TUI para **OpenCode V2** (pin `@opencode/plugin` **2.0.3**) que adiciona
+ditado (speech-to-text) no composer: grava o microfone, transcreve e **insere**
+o texto no prompt ou **envia** direto na sessão ativa.
 
-A transcrição é inserida no campo de prompt via clipboard + o comando interno
-`prompt.paste`, ou enviada como prompt direto na sessão ativa.
+O provider padrão é **MiniMax**. Também funciona com OpenAI Whisper, Groq e
+qualquer servidor **OpenAI-compatible** (`POST …/audio/transcriptions`).
 
 ---
 
-## Pré-requisitos do sistema
+## Créditos
+
+Este repositório é trabalho derivado / reimplementação de **Waldson Vital**,
+baseado em [cgarrot/opencode-stt](https://github.com/cgarrot/opencode-stt)
+(MIT, Copyright 2026 OpenCode STT contributors).
+
+A API de plugin vem de `@opencode/plugin` (MIT).
+
+## Licença
+
+MIT. Os dois copyrights e o texto completo estão em [`LICENSE`](LICENSE).
+
+---
+
+## Pré-requisitos
 
 | Ferramenta | Por quê | Verificar |
 |---|---|---|
-| `ffmpeg` | Gravar microfone via PulseAudio/PipeWire | `which ffmpeg` |
-| `wl-copy`, `wl-paste` | Manipular o clipboard do Wayland | `which wl-copy` |
-| `PulseAudio` ou `PipeWire` | Source de áudio padrão | `ls /run/user/$UID/pulse/native` |
+| OpenCode TUI 2.0.3 | Host que carrega o plugin | — |
+| `ffmpeg` | Grava o microfone via PulseAudio/PipeWire | `which ffmpeg` |
+| `wl-copy`, `wl-paste` (`wl-clipboard`) | Clipboard Wayland (inserção no composer) | `which wl-copy` |
+| PulseAudio ou PipeWire | Source de áudio `default` (hardcoded) | `ls /run/user/$UID/pulse/native` |
 
 Sem `wl-copy`/`wl-paste`, `/stt-selftest` e qualquer inserção no composer
-falham com mensagem de erro clara.
+falham. **Não há fallback X11** (`xclip`/`xsel` não são usados).
 
 ---
 
 ## Instalação
 
-O OpenCode 2.0.3 descobre plugins em `~/.config/opencode/plugins/<name>`
-quando cada entrada é um **symlink** (ou pasta) que resolve para a raiz do
-pacote. A raiz precisa expor `tui.ts` reexportando a entrada do plugin.
-
 ```bash
-cd ~/Projetos/opencode-stt
-npm install
-
-mkdir -p ~/.config/opencode/plugins
-ln -s ~/Projetos/opencode-stt ~/.config/opencode/plugins/opencode-stt
+cd /caminho/para/opencode-stt
+./install.sh
 ```
 
-Reinicie o OpenCode. O loader resolve o symlink, carrega `./tui.ts` e roda
-o `setup()`.
+O script instala as dependências, cria `~/.config/opencode/plugins` se
+preciso e aponta um symlink para a raiz deste repositório. É idempotente:
+rodar de novo só recria o link.
 
-### Defaults
+Abra o OpenCode e rode **`/stt-config`** para escolher o provedor e colar a
+API key. Depois use **`ctrl+alt+v`** para ditar.
 
-Sem nenhuma option, o plugin usa:
-
-| Campo | Default | Trocar em |
-|---|---|---|
-| `provider` | `minimax` | Variável de ambiente (veja abaixo) ou editar `src/tui.ts` |
-| `apiKeyEnv` (minimax) | `MINIMAX_API_KEY` | Editar `src/tui.ts` |
-| `language` | `pt` | `/stt-language` em runtime (persistido) |
-
-> **Limitação 2.0.3:** entradas `{ "plugins": [{ "package": ..., "options":
-> {...} }] }` em `~/.config/opencode/cli.json` — as options do formato
-> objeto **não chegam à TUI no 2.0.3** (quebra observada empiricamente
-> na entrega da config à TUI; o loader em si suporta o formato). Por
-> isso, defaults ficam no código (`src/tui.ts`) e o idioma é ajustável
-> em runtime via `/stt-language`. Para trocar provider/keybinds
-> persistentes, edite `src/tui.ts` e reinicie a TUI (hot reload revalida
-> `setup`).
-
-### Provider MiniMax
-
-Exporte a chave de API antes de abrir o OpenCode:
+A key **não** precisa estar no código. Você pode, se preferir, exportar a
+variável de ambiente **antes** de abrir o OpenCode — ela vence o arquivo
+gravado pelo wizard:
 
 ```bash
-export MINIMAX_API_KEY="sua-chave-aqui"
+export MINIMAX_API_KEY="sua-chave"   # ou OPENAI_API_KEY / GROQ_API_KEY
 ```
-
-Endpoint: `https://api.minimax.io/v1/speech_to_text` (fixo).
-Modelo padrão: `asr-1.0` (sobrescrevível editando `createMiniMax` em
-`src/providers/minimax.ts`).
-
-### Provider OpenAI-compatible
-
-Para Groq, OpenAI, LM Studio ou qualquer servidor que implemente
-`POST {baseUrl}/audio/transcriptions`:
-
-1. Edite `src/tui.ts` e troque o `providerId` para `"openai-compat"`.
-2. Preencha `opts.openai.baseUrl`, `opts.openai.model`, e (opcional) o nome
-   da env var em `opts.openai.apiKeyEnv` (default `OPENAI_API_KEY`).
-3. Exporte `OPENAI_API_KEY` (ou o nome configurado) e reinicie a TUI.
 
 ---
 
-## Comandos
+## `/stt-config`
+
+Dialogs no próprio OpenCode. Cancelar em qualquer passo **não grava** nada.
+
+| Preset | Endpoint / modelo | Env da key |
+|---|---|---|
+| MiniMax (padrão) | endpoint MiniMax fixo | `MINIMAX_API_KEY` |
+| OpenAI Whisper | `https://api.openai.com/v1` · `whisper-1` | `OPENAI_API_KEY` |
+| Groq | `https://api.groq.com/openai/v1` · `whisper-large-v3-turbo` | `GROQ_API_KEY` |
+| Outro (OpenAI-compatible) | você informa `baseUrl` e `model` | nome da env (default `OPENAI_API_KEY`) |
+
+A key é pedida num dialog **sem máscara** (o texto aparece na tela) e vai
+só para `~/.config/opencode/opencode-stt.secrets.json` com permissão `600`.
+Não entra no git nem no storage do plugin.
+
+**Precedência da key:** `process.env[nomeDaEnv]` se não-vazio **vence** o
+arquivo de secrets. Sem os dois, o plugin pede para rodar `/stt-config`.
+
+No preset **Outro**, informe só a base (`…/v1`), **não** o path
+`/audio/transcriptions`. openai-compat **ignora** o idioma
+(`/stt-language` não afeta Groq/OpenAI/LM Studio).
+
+---
+
+## Comandos e atalhos
+
+Keybinds **não** são configuráveis.
 
 | Keybind | Slash | O que faz |
 |---|---|---|
-| `ctrl+alt+v` | `/stt-record` | Inicia ou para a gravação. Ao parar, transcreve e **insere no composer**. |
-| `<leader>v` | `/stt-submit` | Inicia ou para a gravação. Ao parar, transcreve e **envia o prompt**. |
+| `ctrl+alt+v` | `/stt-record` | Alterna gravação. Ao parar, transcreve e **insere no composer**. |
+| `<leader>v` | `/stt-submit` | Alterna gravação. Ao parar, transcreve e **envia o prompt**. |
 | — | `/stt-stop` | Cancela a gravação atual sem transcrever. |
-| — | `/stt-language` | Dialog para escolher `pt` / `en` / `es` / `auto`. Persistido. |
-| — | `/stt-selftest` | Insere texto fixo no composer (sem gravar áudio). Útil para validar a inserção. |
+| — | `/stt-language` | Dialog `pt` / `en` / `es` / `auto`. Persistido. Só o MiniMax usa o idioma no request. |
+| — | `/stt-config` | Escolhe provedor e grava a API key. |
+| — | `/stt-selftest` | Insere texto fixo no composer (sem áudio). Valida clipboard + `prompt.paste`. |
 
-`<leader>` é `ctrl+x` por padrão no OpenCode V2.
+O plugin usa o bind `"<leader>v"`; o valor de `<leader>` vem do host.
+Os comandos também aparecem na command palette (`palette: true`).
+
+---
+
+## Chip ASR
+
+Slot `prompt.footer.status` (append; não substitui o indicador de esforço
+do host). Idle não renderiza nada.
+
+| Fase | Chip |
+|---|---|
+| Gravando | `● ASR` |
+| Transcrevendo | spinner braille + ` ASR` |
+| Sucesso | `✓ ASR` (~2,5 s, depois some) |
 
 ---
 
 ## Como funciona a inserção
 
-A OpenCode V2 não expõe uma API pública de "append no composer". O plugin:
+A OpenCode V2 não expõe API pública de “append no composer”. No modo inserir,
+o plugin:
 
-1. Salva o conteúdo atual do clipboard (`wl-paste`).
+1. Salva o clipboard atual (`wl-paste --no-newline`).
 2. Copia o texto transcrito (`wl-copy`).
-3. Despacha o comando interno `prompt.paste` (a cola do prompt).
-4. Aguarda ~180 ms para a TUI ler o clipboard.
+3. Despacha o comando interno `prompt.paste`.
+4. Espera ~180 ms para a TUI ler o clipboard.
 5. Restaura o clipboard original.
 
-O áudio nunca sai do provider configurado. Arquivo temporário em
-`/tmp/opencode/opencode-stt.wav` é removido após transcrição/cancelamento.
+O modo enviar usa `session.prompt` na sessão ativa (não passa pelo clipboard).
 
-A gravação usa `ffmpeg -f pulse -i default -ac 1 -ar 16000` com SIGINT para
-finalização limpa. Trava de segurança em 495 s (limite da API MiniMax é 500 s).
+Áudio temporário: `/tmp/opencode/opencode-stt.wav` (removido após transcrição
+ou cancelamento). Gravação: `ffmpeg -f pulse -i default -ac 1 -ar 16000`,
+finalizada com SIGINT. Teto de 495 s (limite MiniMax 500 s). Timeout de
+transcrição: 180 s.
+
+---
+
+## Limitações
+
+- **Só Wayland** (`wl-copy` / `wl-paste`). Sem X11.
+- Source Pulse **hardcoded** `default`.
+- openai-compat **ignora** o idioma.
+- Modelo MiniMax `asr-1.0` e o endpoint MiniMax **não** são configuráveis.
+- Keybinds fixos (`ctrl+alt+v`, `<leader>v`).
+- Máximo de 495 s por ditado.
+- Sem retry automático — falha de rede vira toast de erro.
+- O dialog da API key **não mascara** o texto.
+
+---
+
+## Avançado
+
+Options do host (`context.options`) ainda **semeiam** provedor/URL/modelo,
+como o idioma. Depois que você roda `/stt-config`, o que o wizard gravou
+vence. Não é preciso editar `src/tui.ts`.
 
 ---
 
 ## Troubleshooting
 
-**"Defina MINIMAX_API_KEY"** — a variável de ambiente não está visível para o
-processo do OpenCode. Exporte no shell **antes** de abrir o TUI, ou use um
-gerenciador de env (systemd `--Environment`, direnv, etc.).
+**"Chave de API não encontrada. Rode /stt-config…"** — não há env visível
+para o processo do OpenCode nem arquivo de secrets. Rode `/stt-config` ou
+exporte a env **antes** de abrir o TUI. Lembre: env não-vazia vence o
+arquivo.
 
-**"Não foi possível iniciar a gravação"** — cheque se `ffmpeg` consegue abrir
-a source `default` do PulseAudio/PipeWire:
+**"Configure o provedor com /stt-config (baseUrl e model…)"** — o provedor
+é openai-compat mas URL/modelo não estão definidos. Rode `/stt-config` e
+escolha OpenAI, Groq ou Outro.
+
+**"Não foi possível iniciar a gravação"** — teste a source `default`:
 
 ```bash
 ffmpeg -y -f pulse -i default -ac 1 -ar 16000 /tmp/teste.wav
-# Ctrl+C após alguns segundos
 ```
 
-Se falhar, selecione outra source:
+Se só outra source funcionar (`pactl list sources short`), o plugin **não**
+aceita isso por option: é preciso alterar `"-i", "default"` em
+`src/recorder.ts`.
 
-```bash
-pactl list sources short
-ffmpeg -y -f pulse -i <NOME_DA_SOURCE> ...
-```
+**`wl-copy` falhou** — instale `wl-clipboard`. Sem fallback X11.
 
-**`wl-copy` falhou** — instale `wl-clipboard` (Arch) ou equivalente. O plugin
-não tem fallback X11.
+**401 MiniMax** — chave inválida ou expirada.
 
-**401 da MiniMax** — chave inválida ou expirada. Gere outra em
-platform.minimax.io.
+**413 MiniMax** — áudio > 50 MB ou > 500 s (o plugin já corta em 495 s).
 
-**413 da MiniMax** — áudio > 50 MB ou > 500 s. O plugin já trava em 495 s.
+**429 MiniMax** — rate limit.
 
-**429 da MiniMax** — rate limit. Aguarde ou reduza o volume de uso.
+**Toast de sucesso mas o composer vazio** — rode `/stt-selftest` com uma
+**sessão aberta** (na home o `prompt.paste` não tem efeito visível). Se o
+selftest colar, o problema foi latência da janela de 180 ms ou clipboard
+não-textual (imagem/arquivo): o save/restore só trata texto.
 
-**Áudio transcrito mas nada aparece no composer** — rode `/stt-selftest`. Se
-nem isso inserir texto, o problema é o mecanismo de clipboard, não o STT.
-
-**Toast de sucesso mas nada colou** — dois casos conhecidos do design
-clipboard-only:
-
-1. **Clipboard anterior era não-textual (imagem, arquivo).** `wl-paste
-   --no-newline` devolve string vazia ao salvar, e `wl-copy ""` sobrescreve
-   o clipboard com vazio na restauração. Resultado: o conteúdo original
-   (imagem) é perdido. Para o STT em si funciona, mas é uma limitação
-   inerente do mecanismo de save/restore do clipboard.
-2. **Janela de 180 ms estourou sob carga alta.** O TUI pode não ter
-   consumido o clipboard antes da restauração. Sintoma: o toast de
-   sucesso aparece mas o composer fica vazio. Reexecute via
-   `/stt-selftest` (não passa por transcrição); se colar, o problema é a
-   latência momentânea da TUI — tente de novo.
-
-`/stt-selftest` exige uma sessão aberta: em outras telas (ex.: home) o
-dispatch de `prompt.paste` não tem efeito visível porque não há composer.
-
----
-
-## Limites deliberados
-
-- Máximo de 495 s por ditado (limite da API MiniMax).
-- Apenas `response_format=json` (campo `text`).
-- Sem retry automático — falhas de rede caem no toast de erro.
-- Idioma `"auto"` não envia o header `language` (a MiniMax detecta sozinha).
-- **OpenCode 2.0.3:** `setup()` roda fora do `<Keymap.Provider>` Solid; chamar
-  `context.keymap.layer(...)` no setup lança `Keymap.Provider is missing`.
-  O plugin registra o layer dentro do `render` de um `context.ui.slot({append:"app"})`
-  (padrão dos plugins built-in), onde a render roda dentro do Provider.
+**Plugin não aparece** — rode `./install.sh` de novo e reinicie o OpenCode.
+O symlink `~/.config/opencode/plugins/opencode-stt` precisa apontar para a
+raiz do pacote (com `tui.ts`).
