@@ -141,7 +141,12 @@ export default define({
           slash: { name: "stt-stop" },
           run: () => {
             if (!core.cancel()) {
-              toast("Nenhuma gravação ativa.", "info");
+              toast(
+                core.isBusy()
+                  ? "Transcrição em andamento — aguarde (limite 180s)."
+                  : "Nenhuma gravação ativa.",
+                "info",
+              );
               return;
             }
             toast("Gravação cancelada.", "info");
@@ -177,9 +182,8 @@ export default define({
         {
           id: "stt.selftest",
           title: "STT: teste de inserção",
-          // ponytail: prompt.paste is void; the success toast only proves the
-          // dispatch fired, not that text landed on screen. /stt-selftest
-          // requires an open session — on the home route there is no composer.
+          // ponytail: prompt.paste is void — success toast proves the
+          // dispatch fired, not that text landed; requires an open session.
           description: "Insere um texto fixo via clipboard. Requer sessão aberta; em outras telas (ex.: home) o dispatch de prompt.paste não tem efeito visível.",
           group: "opencode-stt",
           palette: true,

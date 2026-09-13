@@ -38,9 +38,8 @@ export async function startRecording(opts: RecordingOptions = {}): Promise<Recor
     { stdio: ["ignore", "ignore", "pipe"] },
   );
 
-  // ponytail: confirm birth before proceeding. Without this, a missing
-  // ffmpeg binary emits `error` async and crashes the TUI host with
-  // uncaughtException; rejecting here lets callers turn it into a toast.
+  // ponytail: await spawn before proceeding; otherwise async ENOENT
+  // crashes the TUI host with uncaughtException (callers turn it into a toast).
   await new Promise<void>((resolve, reject) => {
     child.once("error", reject);
     child.once("spawn", () => resolve());

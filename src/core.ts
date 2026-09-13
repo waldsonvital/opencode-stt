@@ -25,6 +25,8 @@ export interface CoreHandle {
   /** Cancels the active recording, if any. Returns true when something was cancelled. */
   cancel(): boolean;
   hasRecorder(): boolean;
+  /** True while a start→stop→transcribe→insert cycle is in flight. */
+  isBusy(): boolean;
 }
 
 /**
@@ -35,9 +37,8 @@ export interface CoreHandle {
  */
 export function createCore(deps: CoreDeps): CoreHandle {
   let recorder: Recorder | null = null;
-  // ponytail: single boolean; survives only within a plugin generation. A
-  // TUI hot reload drops the in-flight toggle (the recorder process itself
-  // persists in storage and is reaped by the teardown cleanup).
+  // ponytail: per-generation; a TUI hot reload drops the in-flight toggle
+  // (recorder process persists in storage and is reaped at teardown).
   let busy = false;
 
   const startToggle = async (mode: Mode): Promise<void> => {
@@ -80,8 +81,8 @@ export function createCore(deps: CoreDeps): CoreHandle {
     busy = true;
     const rec = recorder;
     recorder = null;
-    deps.persistRecorder(null);
     try {
+      deps.persistRecorder(null);
       const prov = deps.getProvider();
       if (!prov.ok) {
         deps.toast(prov.error, "error", 5000);
@@ -127,5 +128,6 @@ export function createCore(deps: CoreDeps): CoreHandle {
     startToggle,
     cancel,
     hasRecorder: () => recorder !== null,
+    isBusy: () => busy,
   };
 }

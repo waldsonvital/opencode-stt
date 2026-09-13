@@ -214,6 +214,7 @@ test("core.cancel: reaps recorder and is idempotent", async () => {
   assert.equal(core.cancel(), true);
   assert.equal(rec.canceled, true);
   assert.equal(core.hasRecorder(), false);
+  assert.equal(core.isBusy(), false, "core is idle after cancel");
   // Idempotent: a second cancel is a no-op.
   assert.equal(core.cancel(), false);
   void events;
