@@ -24,29 +24,37 @@ falham com mensagem de erro clara.
 
 ## Instalação
 
+O OpenCode 2.0.3 descobre plugins em `~/.config/opencode/plugins/<name>`
+quando cada entrada é um **symlink** (ou pasta) que resolve para a raiz do
+pacote. A raiz precisa expor `tui.ts` reexportando a entrada do plugin.
+
 ```bash
 cd ~/Projetos/opencode-stt
 npm install
+
+mkdir -p ~/.config/opencode/plugins
+ln -s ~/Projetos/opencode-stt ~/.config/opencode/plugins/opencode-stt
 ```
 
-Adicione ao seu `~/.config/opencode/cli.json`:
+Reinicie o OpenCode. O loader resolve o symlink, carrega `./tui.ts` e roda
+o `setup()`.
 
-```jsonc
-{
-  "plugins": [
-    {
-      "package": "/home/waldson/Projetos/opencode-stt",
-      "options": {
-        "provider": "minimax",
-        "apiKeyEnv": "MINIMAX_API_KEY",
-        "language": "pt"
-      }
-    }
-  ]
-}
-```
+### Defaults
 
-Reinicie o OpenCode.
+Sem nenhuma option, o plugin usa:
+
+| Campo | Default | Trocar em |
+|---|---|---|
+| `provider` | `minimax` | Variável de ambiente (veja abaixo) ou editar `src/tui.ts` |
+| `apiKeyEnv` (minimax) | `MINIMAX_API_KEY` | Editar `src/tui.ts` |
+| `language` | `pt` | `/stt-language` em runtime (persistido) |
+
+> **Limitação 2.0.3:** entradas `{ "plugins": [{ "package": ..., "options":
+> {...} }] }` em `~/.config/opencode/cli.json` **não são resolvidas** pelo
+> loader: o formato objeto é silenciosamente ignorado. Por isso, defaults
+> ficam no código (`src/tui.ts`) e o idioma é ajustável em runtime via
+> `/stt-language`. Para trocar provider/keybinds persistentes, edite
+> `src/tui.ts` e reinicie a TUI (hot reload revalida `setup`).
 
 ### Provider MiniMax
 
@@ -57,33 +65,18 @@ export MINIMAX_API_KEY="sua-chave-aqui"
 ```
 
 Endpoint: `https://api.minimax.io/v1/speech_to_text` (fixo).
-Modelo padrão: `asr-1.0` (sobrescrevível via `options.minimax.model`).
+Modelo padrão: `asr-1.0` (sobrescrevível editando `createMiniMax` em
+`src/providers/minimax.ts`).
 
 ### Provider OpenAI-compatible
 
 Para Groq, OpenAI, LM Studio ou qualquer servidor que implemente
 `POST {baseUrl}/audio/transcriptions`:
 
-```jsonc
-{
-  "plugins": [
-    {
-      "package": "/home/waldson/Projetos/opencode-stt",
-      "options": {
-        "provider": "openai-compat",
-        "language": "pt",
-        "openai": {
-          "baseUrl": "http://localhost:8000/v1",
-          "model": "whisper-large-v3-turbo",
-          "apiKeyEnv": "OPENAI_API_KEY"
-        }
-      }
-    }
-  ]
-}
-```
-
-E exporte `OPENAI_API_KEY` (ou o nome configurado em `apiKeyEnv`).
+1. Edite `src/tui.ts` e troque o `providerId` para `"openai-compat"`.
+2. Preencha `opts.openai.baseUrl`, `opts.openai.model`, e (opcional) o nome
+   da env var em `opts.openai.apiKeyEnv` (default `OPENAI_API_KEY`).
+3. Exporte `OPENAI_API_KEY` (ou o nome configurado) e reinicie a TUI.
 
 ---
 
@@ -178,3 +171,7 @@ dispatch de `prompt.paste` não tem efeito visível porque não há composer.
 - Apenas `response_format=json` (campo `text`).
 - Sem retry automático — falhas de rede caem no toast de erro.
 - Idioma `"auto"` não envia o header `language` (a MiniMax detecta sozinha).
+- **OpenCode 2.0.3:** `setup()` roda fora do `<Keymap.Provider>` Solid; chamar
+  `context.keymap.layer(...)` no setup lança `Keymap.Provider is missing`.
+  O plugin registra o layer dentro do `render` de um `context.ui.slot({append:"app"})`
+  (padrão dos plugins built-in), onde a render roda dentro do Provider.

@@ -109,96 +109,104 @@ export default define({
       },
     });
 
-    context.keymap.layer(() => ({
-      mode: "global",
-      commands: [
-        {
-          id: "stt.record",
-          title: "STT: gravar e inserir",
-          description: "Alterna gravação de áudio. Ao parar, transcreve e insere no composer.",
-          group: "opencode-stt",
-          bind: "ctrl+alt+v",
-          palette: true,
-          slash: { name: "stt-record" },
-          run: () => core.startToggle("append"),
-        },
-        {
-          id: "stt.submit",
-          title: "STT: gravar e enviar",
-          description: "Alterna gravação de áudio. Ao parar, transcreve e envia o prompt.",
-          group: "opencode-stt",
-          bind: "<leader>v",
-          palette: true,
-          slash: { name: "stt-submit" },
-          run: () => core.startToggle("submit"),
-        },
-        {
-          id: "stt.stop",
-          title: "STT: cancelar gravação",
-          description: "Cancela a gravação atual sem transcrever.",
-          group: "opencode-stt",
-          palette: true,
-          slash: { name: "stt-stop" },
-          run: () => {
-            if (!core.cancel()) {
-              toast(
-                core.isBusy()
-                  ? "Transcrição em andamento — aguarde (limite 180s)."
-                  : "Nenhuma gravação ativa.",
-                "info",
-              );
-              return;
-            }
-            toast("Gravação cancelada.", "info");
-          },
-        },
-        {
-          id: "stt.language",
-          title: "STT: escolher idioma",
-          description: "Seleciona o idioma de transcrição.",
-          group: "opencode-stt",
-          palette: true,
-          slash: { name: "stt-language" },
-          run: async () => {
-            const current = langStore.value as Language;
-            const picked = await context.ui.dialog.select({
-              title: "Idioma de transcrição",
-              current,
-              options: [
-                { value: "pt", title: "pt — português (padrão)" },
-                { value: "en", title: "en — inglês" },
-                { value: "es", title: "es — espanhol" },
-                { value: "auto", title: "auto — multi-idioma" },
-              ],
-            });
-            if (picked) {
-              await mutateLang((draft) => {
-                draft.value = picked as Language;
-              });
-              toast(`Idioma: ${picked}`, "success", 1500);
-            }
-          },
-        },
-        {
-          id: "stt.selftest",
-          title: "STT: teste de inserção",
-          // ponytail: prompt.paste is void — success toast proves the
-          // dispatch fired, not that text landed; requires an open session.
-          description: "Insere um texto fixo via clipboard. Requer sessão aberta; em outras telas (ex.: home) o dispatch de prompt.paste não tem efeito visível.",
-          group: "opencode-stt",
-          palette: true,
-          slash: { name: "stt-selftest" },
-          run: async () => {
-            try {
-              await appendViaClipboard(context, "teste de inserção do opencode-stt");
-              toast("Texto de teste inserido.", "success");
-            } catch (e) {
-              toast(e instanceof Error ? e.message : "Falha no teste.", "error", 5000);
-            }
-          },
-        },
-      ],
-    }));
+    // setup runs OUTSIDE Solid's <Keymap.Provider> in OpenCode 2.0.3, so
+    // keymap.layer() must be invoked from a slot's render (which is in scope).
+    context.ui.slot({
+      append: "app",
+      render: () => {
+        context.keymap.layer(() => ({
+          mode: "global",
+          commands: [
+            {
+              id: "stt.record",
+              title: "STT: gravar e inserir",
+              description: "Alterna gravação de áudio. Ao parar, transcreve e insere no composer.",
+              group: "opencode-stt",
+              bind: "ctrl+alt+v",
+              palette: true,
+              slash: { name: "stt-record" },
+              run: () => core.startToggle("append"),
+            },
+            {
+              id: "stt.submit",
+              title: "STT: gravar e enviar",
+              description: "Alterna gravação de áudio. Ao parar, transcreve e envia o prompt.",
+              group: "opencode-stt",
+              bind: "<leader>v",
+              palette: true,
+              slash: { name: "stt-submit" },
+              run: () => core.startToggle("submit"),
+            },
+            {
+              id: "stt.stop",
+              title: "STT: cancelar gravação",
+              description: "Cancela a gravação atual sem transcrever.",
+              group: "opencode-stt",
+              palette: true,
+              slash: { name: "stt-stop" },
+              run: () => {
+                if (!core.cancel()) {
+                  toast(
+                    core.isBusy()
+                      ? "Transcrição em andamento — aguarde (limite 180s)."
+                      : "Nenhuma gravação ativa.",
+                    "info",
+                  );
+                  return;
+                }
+                toast("Gravação cancelada.", "info");
+              },
+            },
+            {
+              id: "stt.language",
+              title: "STT: escolher idioma",
+              description: "Seleciona o idioma de transcrição.",
+              group: "opencode-stt",
+              palette: true,
+              slash: { name: "stt-language" },
+              run: async () => {
+                const current = langStore.value as Language;
+                const picked = await context.ui.dialog.select({
+                  title: "Idioma de transcrição",
+                  current,
+                  options: [
+                    { value: "pt", title: "pt — português (padrão)" },
+                    { value: "en", title: "en — inglês" },
+                    { value: "es", title: "es — espanhol" },
+                    { value: "auto", title: "auto — multi-idioma" },
+                  ],
+                });
+                if (picked) {
+                  await mutateLang((draft) => {
+                    draft.value = picked as Language;
+                  });
+                  toast(`Idioma: ${picked}`, "success", 1500);
+                }
+              },
+            },
+            {
+              id: "stt.selftest",
+              title: "STT: teste de inserção",
+              // ponytail: prompt.paste is void — success toast proves the
+              // dispatch fired, not that text landed; requires an open session.
+              description: "Insere um texto fixo via clipboard. Requer sessão aberta; em outras telas (ex.: home) o dispatch de prompt.paste não tem efeito visível.",
+              group: "opencode-stt",
+              palette: true,
+              slash: { name: "stt-selftest" },
+              run: async () => {
+                try {
+                  await appendViaClipboard(context, "teste de inserção do opencode-stt");
+                  toast("Texto de teste inserido.", "success");
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Falha no teste.", "error", 5000);
+                }
+              },
+            },
+          ],
+        }));
+        return null;
+      },
+    });
 
     // Reap any ffmpeg process this generation owns, and also any orphan a
     // previous generation left in the shared memory store (hot reload or TUI
