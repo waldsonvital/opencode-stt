@@ -50,11 +50,13 @@ Sem nenhuma option, o plugin usa:
 | `language` | `pt` | `/stt-language` em runtime (persistido) |
 
 > **Limitação 2.0.3:** entradas `{ "plugins": [{ "package": ..., "options":
-> {...} }] }` em `~/.config/opencode/cli.json` **não são resolvidas** pelo
-> loader: o formato objeto é silenciosamente ignorado. Por isso, defaults
-> ficam no código (`src/tui.ts`) e o idioma é ajustável em runtime via
-> `/stt-language`. Para trocar provider/keybinds persistentes, edite
-> `src/tui.ts` e reinicie a TUI (hot reload revalida `setup`).
+> {...} }] }` em `~/.config/opencode/cli.json` — as options do formato
+> objeto **não chegam à TUI no 2.0.3** (quebra observada empiricamente
+> na entrega da config à TUI; o loader em si suporta o formato). Por
+> isso, defaults ficam no código (`src/tui.ts`) e o idioma é ajustável
+> em runtime via `/stt-language`. Para trocar provider/keybinds
+> persistentes, edite `src/tui.ts` e reinicie a TUI (hot reload revalida
+> `setup`).
 
 ### Provider MiniMax
 
