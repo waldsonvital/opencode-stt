@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { SttError, type SttOptions, type SttProvider, type SttResult } from "./types.ts";
 
 const ENDPOINT = "https://api.minimax.io/v1/speech_to_text";
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 180_000;
 const DEFAULT_MODEL = "asr-1.0";
 
 export interface MiniMaxOptions {
@@ -16,7 +16,7 @@ export function createMiniMax(opts: MiniMaxOptions): SttProvider {
   return {
     id: "minimax",
     async transcribe(wavPath, { language }: SttOptions): Promise<SttResult> {
-      const file = new Blob([await readFile(wavPath)]);
+      const file = new Blob([await readFile(wavPath)], { type: "audio/wav" });
       const form = new FormData();
       form.set("model", model);
       form.set("file", file, "audio.wav");
@@ -45,6 +45,9 @@ async function timedFetch(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, { ...init, signal: ctrl.signal });
   } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new SttError("timeout", "Transcrição excedeu o tempo limite");
+    }
     const msg = e instanceof Error ? e.message : String(e);
     throw new SttError("network", msg);
   } finally {

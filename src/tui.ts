@@ -6,9 +6,9 @@ import type { Context } from "@opencode/plugin/tui/plugin";
 import { unlink } from "node:fs/promises";
 import { startRecording, type Recorder } from "./recorder.ts";
 import { appendViaClipboard, submitDirect } from "./insert.ts";
-import { SttError, type SttProvider } from "./providers/types.ts";
 import { createMiniMax } from "./providers/minimax.ts";
 import { createOpenAICompat } from "./providers/openai-compat.ts";
+import { createCore, type ProviderResult } from "./core.ts";
 
 interface PluginOptions {
   readonly provider?: "minimax" | "openai-compat";
@@ -51,9 +51,12 @@ export default define({
     const toast = (message: string, variant: "info" | "success" | "warning" | "error" = "info", duration = 3000) =>
       context.ui.toast.show({ message, variant, duration });
 
-    const getProvider = ():
-      | { ok: true; provider: SttProvider; language: string | undefined }
-      | { ok: false; error: string } => {
+    const currentLanguage = (): string | undefined => {
+      const v = langStore.value as Language;
+      return v === "auto" ? undefined : v;
+    };
+
+    const getProvider = (): ProviderResult => {
       if (providerId === "minimax") {
         const key = process.env[apiKeyEnv];
         if (!key) return { ok: false, error: `Defina a variável de ambiente ${apiKeyEnv}.` };
@@ -73,19 +76,15 @@ export default define({
         return {
           ok: true,
           provider: createOpenAICompat({ baseUrl, model, apiKey: key }),
-          // ponytail: most OpenAI-compat servers ignore the language hint; pass through anyway.
-          language: currentLanguage(),
+          // ponytail: most OpenAI-compat servers ignore the language hint,
+          // and the openai-compat provider discards it anyway — skip the wire.
+          language: undefined,
         };
       }
       return {
         ok: false,
         error: `Provider "${providerId}" desconhecido. Suportados: minimax, openai-compat.`,
       };
-    };
-
-    const currentLanguage = (): string | undefined => {
-      const v = langStore.value as Language;
-      return v === "auto" ? undefined : v;
     };
 
     const cleanupFile = async (path: string) => {
@@ -96,67 +95,19 @@ export default define({
       }
     };
 
-    const finaliseAndInsert = async (mode: "append" | "submit") => {
-      const prov = getProvider();
-      if (!prov.ok) {
-        toast(prov.error, "error", 5000);
-        return;
-      }
-      const recorder = stateStore.recorder;
-      if (!recorder) {
-        toast("Nenhuma gravação ativa.", "info");
-        return;
-      }
-      const path = recorder.outputPath;
-      mutateState((draft) => {
-        draft.recorder = null;
-      });
-      await recorder.stop();
-      toast("Transcrevendo…", "info", 1500);
-
-      try {
-        const res = await prov.provider.transcribe(path, { language: prov.language });
-        await cleanupFile(path);
-        if (!res.text) {
-          toast("Nenhuma fala detectada.", "warning");
-          return;
-        }
-        if (mode === "append") {
-          await appendViaClipboard(context, res.text);
-          toast("Texto inserido no composer.", "success");
-        } else {
-          await submitDirect(context, res.text);
-          toast("Prompt enviado.", "success");
-        }
-      } catch (e) {
-        await cleanupFile(path);
-        const msg = e instanceof SttError ? e.message : e instanceof Error ? e.message : String(e);
-        toast(`STT falhou: ${msg}`, "error", 6000);
-      }
-    };
-
-    const startToggle = async (mode: "append" | "submit") => {
-      const cur = stateStore.recorder;
-      if (cur) {
-        await finaliseAndInsert(mode);
-        return;
-      }
-      try {
-        const rec = await startRecording();
+    const core = createCore({
+      startRecording: () => startRecording(),
+      getProvider,
+      insertAppend: (text) => appendViaClipboard(context, text),
+      insertSubmit: (text) => submitDirect(context, text),
+      cleanupFile,
+      toast,
+      persistRecorder: (rec) => {
         mutateState((draft) => {
           draft.recorder = rec;
         });
-        toast(
-          mode === "append"
-            ? "Gravando… ctrl+alt+v para transcrever e inserir."
-            : "Gravando… <leader>v para transcrever e enviar.",
-          "info",
-          3000,
-        );
-      } catch (e) {
-        toast(`Não foi possível iniciar a gravação: ${e instanceof Error ? e.message : String(e)}`, "error", 5000);
-      }
-    };
+      },
+    });
 
     context.keymap.layer(() => ({
       mode: "global",
@@ -169,7 +120,7 @@ export default define({
           bind: "ctrl+alt+v",
           palette: true,
           slash: { name: "stt-record" },
-          run: () => startToggle("append"),
+          run: () => core.startToggle("append"),
         },
         {
           id: "stt.submit",
@@ -179,7 +130,7 @@ export default define({
           bind: "<leader>v",
           palette: true,
           slash: { name: "stt-submit" },
-          run: () => startToggle("submit"),
+          run: () => core.startToggle("submit"),
         },
         {
           id: "stt.stop",
@@ -189,15 +140,10 @@ export default define({
           palette: true,
           slash: { name: "stt-stop" },
           run: () => {
-            const cur = stateStore.recorder;
-            if (!cur) {
+            if (!core.cancel()) {
               toast("Nenhuma gravação ativa.", "info");
               return;
             }
-            mutateState((draft) => {
-              draft.recorder = null;
-            });
-            cur.cancel();
             toast("Gravação cancelada.", "info");
           },
         },
@@ -231,7 +177,10 @@ export default define({
         {
           id: "stt.selftest",
           title: "STT: teste de inserção",
-          description: "Insere um texto fixo no composer via clipboard (sem gravar áudio).",
+          // ponytail: prompt.paste is void; the success toast only proves the
+          // dispatch fired, not that text landed on screen. /stt-selftest
+          // requires an open session — on the home route there is no composer.
+          description: "Insere um texto fixo via clipboard. Requer sessão aberta; em outras telas (ex.: home) o dispatch de prompt.paste não tem efeito visível.",
           group: "opencode-stt",
           palette: true,
           slash: { name: "stt-selftest" },
@@ -246,5 +195,19 @@ export default define({
         },
       ],
     }));
+
+    // Reap any ffmpeg process this generation owns, and also any orphan a
+    // previous generation left in the shared memory store (hot reload or TUI
+    // shutdown). cancel() is a no-op when there is no active recorder.
+    return () => {
+      core.cancel();
+      const orphan = stateStore.recorder;
+      if (orphan) {
+        mutateState((draft) => {
+          draft.recorder = null;
+        });
+        orphan.cancel();
+      }
+    };
   },
 });

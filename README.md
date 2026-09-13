@@ -153,6 +153,23 @@ platform.minimax.io.
 **Áudio transcrito mas nada aparece no composer** — rode `/stt-selftest`. Se
 nem isso inserir texto, o problema é o mecanismo de clipboard, não o STT.
 
+**Toast de sucesso mas nada colou** — dois casos conhecidos do design
+clipboard-only:
+
+1. **Clipboard anterior era não-textual (imagem, arquivo).** `wl-paste
+   --no-newline` devolve string vazia ao salvar, e `wl-copy ""` sobrescreve
+   o clipboard com vazio na restauração. Resultado: o conteúdo original
+   (imagem) é perdido. Para o STT em si funciona, mas é uma limitação
+   inerente do mecanismo de save/restore do clipboard.
+2. **Janela de 180 ms estourou sob carga alta.** O TUI pode não ter
+   consumido o clipboard antes da restauração. Sintoma: o toast de
+   sucesso aparece mas o composer fica vazio. Reexecute via
+   `/stt-selftest` (não passa por transcrição); se colar, o problema é a
+   latência momentânea da TUI — tente de novo.
+
+`/stt-selftest` exige uma sessão aberta: em outras telas (ex.: home) o
+dispatch de `prompt.paste` não tem efeito visível porque não há composer.
+
 ---
 
 ## Limites deliberados

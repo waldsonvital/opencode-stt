@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { SttError, type SttOptions, type SttProvider, type SttResult } from "./types.ts";
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 180_000;
 
 export interface OpenAICompatOptions {
   readonly baseUrl: string;
@@ -15,7 +15,7 @@ export function createOpenAICompat(opts: OpenAICompatOptions): SttProvider {
   return {
     id: "openai-compat",
     async transcribe(wavPath, _opts: SttOptions): Promise<SttResult> {
-      const file = new Blob([await readFile(wavPath)]);
+      const file = new Blob([await readFile(wavPath)], { type: "audio/wav" });
       const form = new FormData();
       form.set("model", opts.model);
       form.set("file", file, "audio.wav");
@@ -31,6 +31,9 @@ export function createOpenAICompat(opts: OpenAICompatOptions): SttProvider {
           signal: ctrl.signal,
         });
       } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") {
+          throw new SttError("timeout", "Transcrição excedeu o tempo limite");
+        }
         throw new SttError("network", e instanceof Error ? e.message : String(e));
       } finally {
         clearTimeout(timer);

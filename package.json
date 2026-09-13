@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/providers.test.mjs"
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "@opencode/plugin": "2.0.3",

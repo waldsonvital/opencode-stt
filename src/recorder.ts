@@ -11,16 +11,22 @@ export interface Recorder {
   cancel(): void;
 }
 
+export interface RecordingOptions {
+  /** Override the ffmpeg binary path (default: "ffmpeg"). Used by tests. */
+  readonly ffmpegPath?: string;
+}
+
 /**
  * Starts an ffmpeg capture from the default PulseAudio/PipeWire source,
  * writing mono 16 kHz PCM WAV. SIGINT (not SIGKILL) is used so ffmpeg
  * finalises headers and flushes the file before exiting.
  */
-export async function startRecording(): Promise<Recorder> {
+export async function startRecording(opts: RecordingOptions = {}): Promise<Recorder> {
+  const ffmpegPath = opts.ffmpegPath ?? "ffmpeg";
   await mkdir(dirname(RECORDING_PATH), { recursive: true });
 
   const child = spawn(
-    "ffmpeg",
+    ffmpegPath,
     [
       "-y",
       "-f", "pulse",
@@ -31,6 +37,14 @@ export async function startRecording(): Promise<Recorder> {
     ],
     { stdio: ["ignore", "ignore", "pipe"] },
   );
+
+  // ponytail: confirm birth before proceeding. Without this, a missing
+  // ffmpeg binary emits `error` async and crashes the TUI host with
+  // uncaughtException; rejecting here lets callers turn it into a toast.
+  await new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("spawn", () => resolve());
+  });
 
   const timer = setTimeout(() => child.kill("SIGINT"), MAX_DURATION_MS);
 
