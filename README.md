@@ -107,16 +107,16 @@ the host. Commands also appear in the command palette (`palette: true`).
 
 ---
 
-## ASR chip
+## STT chip
 
 Slot `prompt.footer.status` (append; does not replace the host effort
 indicator). Idle renders nothing.
 
 | Phase | Chip |
 |---|---|
-| Recording | `● ASR` |
-| Transcribing | braille spinner + ` ASR` |
-| Success | `✓ ASR` (~2.5 s, then it disappears) |
+| Recording | `● STT` |
+| Transcribing | braille spinner + ` STT` |
+| Success | `✓ STT` (~2.5 s, then it disappears) |
 
 ---
 

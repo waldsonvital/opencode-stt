@@ -39,17 +39,17 @@ type Dialog = Context["ui"]["dialog"];
 async function promptCustomProvider(dialog: Dialog): Promise<ProviderConfig | undefined> {
   const baseUrl = await dialog.prompt({
     title: "Base URL",
-    description: "Sem barra final e sem /audio/transcriptions. Ex.: http://localhost:1234/v1",
+    description: "No trailing slash and no /audio/transcriptions. E.g.: http://localhost:1234/v1",
     placeholder: "https://api.openai.com/v1",
   });
   if (baseUrl === undefined) return;
   const model = await dialog.prompt({
-    title: "Modelo",
+    title: "Model",
     placeholder: "whisper-1",
   });
   if (model === undefined) return;
   const envName = await dialog.prompt({
-    title: "Nome da variável de ambiente da API key",
+    title: "API key environment variable name",
     value: "OPENAI_API_KEY",
   });
   if (envName === undefined) return;
@@ -62,7 +62,7 @@ async function promptCustomProvider(dialog: Dialog): Promise<ProviderConfig | un
     apiKeyEnv: envName.trim() || "OPENAI_API_KEY",
     baseUrl: trimmedUrl,
     model: trimmedModel,
-    label: "Outro",
+    label: "Other",
   };
 }
 
@@ -71,13 +71,13 @@ async function runConfigWizard(
   current: ProviderConfig,
 ): Promise<{ config: ProviderConfig; apiKey: string } | undefined> {
   const picked = await dialog.select<PresetId>({
-    title: "Provedor de transcrição",
+    title: "Transcription provider",
     current: current.presetId,
     options: [
-      { value: "minimax", title: "MiniMax (padrão)" },
+      { value: "minimax", title: "MiniMax (default)" },
       { value: "openai", title: "OpenAI Whisper" },
       { value: "groq", title: "Groq" },
-      { value: "other", title: "Outro (OpenAI-compatible)" },
+      { value: "other", title: "Other (OpenAI-compatible)" },
     ],
   });
   if (!picked) return;
@@ -89,8 +89,8 @@ async function runConfigWizard(
   const apiKey = await dialog.prompt({
     title: "API key",
     description:
-      "O texto aparece neste dialog (sem máscara) e será gravado em ~/.config/opencode/opencode-stt.secrets.json com permissão 600.",
-    placeholder: "cole a chave",
+      "The text appears unmasked in this dialog and will be written to ~/.config/opencode/opencode-stt.secrets.json with mode 600.",
+    placeholder: "paste the key",
   });
   if (apiKey === undefined) return;
   const trimmed = apiKey.trim();
@@ -217,8 +217,8 @@ export default define({
           commands: [
             {
               id: "stt.record",
-              title: "STT: gravar e inserir",
-              description: "Alterna gravação de áudio. Ao parar, transcreve e insere no composer.",
+              title: "STT: record and insert",
+              description: "Toggles audio recording. On stop, transcribes and inserts into the composer.",
               group: "opencode-stt",
               bind: "ctrl+alt+v",
               palette: true,
@@ -227,8 +227,8 @@ export default define({
             },
             {
               id: "stt.submit",
-              title: "STT: gravar e enviar",
-              description: "Alterna gravação de áudio. Ao parar, transcreve e envia o prompt.",
+              title: "STT: record and submit",
+              description: "Toggles audio recording. On stop, transcribes and submits the prompt.",
               group: "opencode-stt",
               bind: "<leader>v",
               palette: true,
@@ -237,8 +237,8 @@ export default define({
             },
             {
               id: "stt.stop",
-              title: "STT: cancelar gravação",
-              description: "Cancela a gravação atual sem transcrever.",
+              title: "STT: cancel recording",
+              description: "Cancels the current recording without transcribing.",
               group: "opencode-stt",
               palette: true,
               slash: { name: "stt-stop" },
@@ -246,46 +246,46 @@ export default define({
                 if (!core.cancel()) {
                   toast(
                     core.isBusy()
-                      ? "Transcrição em andamento — aguarde (limite 180s)."
-                      : "Nenhuma gravação ativa.",
+                      ? "Transcription in progress — wait (180s limit)."
+                      : "No recording in progress.",
                     "info",
                   );
                   return;
                 }
-                toast("Gravação cancelada.", "info");
+                toast("Recording cancelled.", "info");
               },
             },
             {
               id: "stt.language",
-              title: "STT: escolher idioma",
-              description: "Seleciona o idioma de transcrição.",
+              title: "STT: choose language",
+              description: "Selects the transcription language.",
               group: "opencode-stt",
               palette: true,
               slash: { name: "stt-language" },
               run: async () => {
                 const current = langStore.value as Language;
                 const picked = await context.ui.dialog.select({
-                  title: "Idioma de transcrição",
+                  title: "Transcription language",
                   current,
                   options: [
-                    { value: "pt", title: "pt — português (padrão)" },
-                    { value: "en", title: "en — inglês" },
-                    { value: "es", title: "es — espanhol" },
-                    { value: "auto", title: "auto — multi-idioma" },
+                    { value: "pt", title: "pt — Portuguese (default)" },
+                    { value: "en", title: "en — English" },
+                    { value: "es", title: "es — Spanish" },
+                    { value: "auto", title: "auto — multi-language" },
                   ],
                 });
                 if (picked) {
                   await mutateLang((draft) => {
                     draft.value = picked as Language;
                   });
-                  toast(`Idioma: ${picked}`, "success", 1500);
+                  toast(`Language: ${picked}`, "success", 1500);
                 }
               },
             },
             {
               id: "stt.config",
-              title: "STT: configurar provedor",
-              description: "Escolhe o provedor de transcrição e grava a API key.",
+              title: "STT: configure provider",
+              description: "Picks the transcription provider and writes the API key.",
               group: "opencode-stt",
               palette: true,
               slash: { name: "stt-config" },
@@ -295,7 +295,7 @@ export default define({
                 try {
                   await writeSecret(result.config.apiKeyEnv, result.apiKey);
                 } catch (e) {
-                  toast(e instanceof Error ? e.message : "Falha ao gravar a chave.", "error", 5000);
+                  toast(e instanceof Error ? e.message : "Failed to write the key.", "error", 5000);
                   return;
                 }
                 await mutateProvider((draft) => {
@@ -306,24 +306,24 @@ export default define({
                   draft.model = result.config.model;
                   draft.label = result.config.label;
                 });
-                toast(`Provedor: ${result.config.label}`, "success");
+                toast(`Provider: ${result.config.label}`, "success");
               },
             },
             {
               id: "stt.selftest",
-              title: "STT: teste de inserção",
+              title: "STT: insertion test",
               // ponytail: prompt.paste is void — success toast proves the
               // dispatch fired, not that text landed; requires an open session.
-              description: "Insere um texto fixo via clipboard. Requer sessão aberta; em outras telas (ex.: home) o dispatch de prompt.paste não tem efeito visível.",
+              description: "Inserts a fixed text via clipboard. Requires an open session; on other screens (e.g., home) the prompt.paste dispatch has no visible effect.",
               group: "opencode-stt",
               palette: true,
               slash: { name: "stt-selftest" },
               run: async () => {
                 try {
-                  await appendViaClipboard(context, "teste de inserção do opencode-stt");
-                  toast("Texto de teste inserido.", "success");
+                  await appendViaClipboard(context, "opencode-stt insertion test");
+                  toast("Test text inserted.", "success");
                 } catch (e) {
-                  toast(e instanceof Error ? e.message : "Falha no teste.", "error", 5000);
+                  toast(e instanceof Error ? e.message : "Test failed.", "error", 5000);
                 }
               },
             },

@@ -55,10 +55,10 @@ export const PRESETS: Record<
 };
 
 export const MISSING_URL_ERROR =
-  "Configure o provedor com /stt-config (baseUrl e model são obrigatórios).";
+  "Configure the provider with /stt-config (baseUrl and model are required).";
 
 export function missingKeyError(apiKeyEnv: string): string {
-  return `Chave de API não encontrada. Rode /stt-config ou exporte ${apiKeyEnv}.`;
+  return `API key not found. Run /stt-config or export ${apiKeyEnv}.`;
 }
 
 export function defaultSecretsPath(): string {
