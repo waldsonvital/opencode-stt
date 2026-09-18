@@ -79,7 +79,7 @@ test("startToggle: first call starts recording and persists to state", async () 
   assert.ok(core.hasRecorder(), "core should own a recorder after start");
   assert.equal(rec.started, false);  // startRecording mock doesn't set this
   assert.ok(
-    events.some((e) => e === "toast:info:Gravando… ctrl+alt+v para transcrever e inserir."),
+    events.some((e) => e === "toast:info:Recording… ctrl+alt+v to transcribe and insert."),
     "expected the recording toast",
   );
 });
@@ -124,7 +124,7 @@ test("startToggle reentrance: second call during transcribe is a no-op", async (
   assert.equal(core.hasRecorder(), false);
   // The concurrent no-op should surface as a warning toast.
   assert.ok(
-    events.some((e) => e === "toast:warning:STT ocupado: aguarde o ciclo anterior terminar."),
+    events.some((e) => e === "toast:warning:STT busy: wait for the previous cycle to finish."),
     "expected a busy toast for the rejected concurrent toggle",
   );
 });
@@ -167,7 +167,7 @@ test("startToggle reentrance: rapid double-tap during spawn does not leak state"
 
   assert.equal(startCount, 1, "second toggle must not spawn a second startRecording");
   assert.ok(core.hasRecorder(), "first toggle should leave a recorder active");
-  assert.equal(events.filter((e) => e === "toast:warning:STT ocupado: aguarde o ciclo anterior terminar.").length, 1);
+  assert.equal(events.filter((e) => e === "toast:warning:STT busy: wait for the previous cycle to finish.").length, 1);
 
   // cleanup so the test runner exits cleanly
   await core.startToggle("append");
@@ -191,7 +191,7 @@ test("startToggle: finalize transcribe error surfaces as STT error toast", async
 
   assert.ok(events.includes("cleanup"), "failed transcribe should still clean the file");
   assert.ok(
-    events.some((e) => e === "toast:error:STT falhou: upstream boom"),
+    events.some((e) => e === "toast:error:STT failed: upstream boom"),
     "expected the failure toast with SttError message",
   );
   assert.deepEqual(events.filter((e) => e.startsWith("phase:")), [
@@ -212,7 +212,7 @@ test("startToggle: no-speech result shows warning and skips insert", async () =>
   await core.startToggle("append");
 
   assert.deepEqual(inserts, []);
-  assert.ok(events.some((e) => e === "toast:warning:Nenhuma fala detectada."));
+  assert.ok(events.some((e) => e === "toast:warning:No speech detected."));
   assert.deepEqual(events.filter((e) => e.startsWith("phase:")), [
     "phase:recording",
     "phase:transcribing",

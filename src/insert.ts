@@ -19,8 +19,8 @@ export async function appendViaClipboard(ctx: Context, text: string): Promise<vo
   const copied = await run("wl-copy", [text]);
   if (!copied.ok) {
     throw new Error(
-      `wl-copy falhou: ${copied.stderr || "comando indisponível"}. ` +
-        "O opencode-stt precisa de wl-clipboard no Wayland.",
+      `wl-copy failed: ${copied.stderr || "command unavailable"}. ` +
+        "opencode-stt needs wl-clipboard on Wayland.",
     );
   }
 
@@ -33,7 +33,7 @@ export async function appendViaClipboard(ctx: Context, text: string): Promise<vo
 export async function submitDirect(ctx: Context, text: string): Promise<void> {
   const route = ctx.ui.router.current();
   if (route.type !== "session") {
-    throw new Error("Nenhuma sessão ativa para enviar o prompt.");
+    throw new Error("No active session to submit the prompt.");
   }
   await ctx.client.session.prompt({
     sessionID: route.sessionID,

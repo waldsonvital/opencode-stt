@@ -16,7 +16,7 @@ type AsrStatusColors = {
   readonly success: Fg;
 };
 
-/** Footer ASR chip: ● recording, braille spinner transcribing, ✓ success. Idle is null. */
+/** Footer STT chip: ● recording, braille spinner transcribing, ✓ success. Idle is null. */
 export function renderAsrStatus(store: AsrStatusStore, colors: AsrStatusColors) {
   const phase = store.phase;
   if (phase === "idle") return null;
@@ -25,5 +25,5 @@ export function renderAsrStatus(store: AsrStatusStore, colors: AsrStatusColors) 
     phase === "recording" ? "●" : phase === "transcribing" ? SPIN[store.spin % SPIN.length] : "✓";
   const color = phase === "success" ? colors.success : colors.recording;
 
-  return <text fg={color}>{`${icon} ASR`}</text>;
+  return <text fg={color}>{`${icon} STT`}</text>;
 }

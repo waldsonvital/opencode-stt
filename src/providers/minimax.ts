@@ -46,7 +46,7 @@ async function timedFetch(url: string, init: RequestInit): Promise<Response> {
     return await fetch(url, { ...init, signal: ctrl.signal });
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
-      throw new SttError("timeout", "Transcrição excedeu o tempo limite");
+      throw new SttError("timeout", "Transcription timed out");
     }
     const msg = e instanceof Error ? e.message : String(e);
     throw new SttError("network", msg);

@@ -105,16 +105,16 @@ Os comandos também aparecem na command palette (`palette: true`).
 
 ---
 
-## Chip ASR
+## Chip STT
 
 Slot `prompt.footer.status` (append; não substitui o indicador de esforço
 do host). Idle não renderiza nada.
 
 | Fase | Chip |
 |---|---|
-| Gravando | `● ASR` |
-| Transcrevendo | spinner braille + ` ASR` |
-| Sucesso | `✓ ASR` (~2,5 s, depois some) |
+| Gravando | `● STT` |
+| Transcrevendo | spinner braille + ` STT` |
+| Sucesso | `✓ STT` (~2,5 s, depois some) |
 
 ---
 

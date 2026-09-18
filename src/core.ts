@@ -48,7 +48,7 @@ export function createCore(deps: CoreDeps): CoreHandle {
 
   const startToggle = async (mode: Mode): Promise<void> => {
     if (busy) {
-      deps.toast("STT ocupado: aguarde o ciclo anterior terminar.", "warning");
+      deps.toast("STT busy: wait for the previous cycle to finish.", "warning");
       return;
     }
     if (recorder) {
@@ -67,15 +67,15 @@ export function createCore(deps: CoreDeps): CoreHandle {
       setPhase("recording");
       deps.toast(
         mode === "append"
-          ? "Gravando… ctrl+alt+v para transcrever e inserir."
-          : "Gravando… <leader>v para transcrever e enviar.",
+          ? "Recording… ctrl+alt+v to transcribe and insert."
+          : "Recording… <leader>v to transcribe and submit.",
         "info",
         3000,
       );
     } catch (e) {
       setPhase("idle");
       deps.toast(
-        `Não foi possível iniciar a gravação: ${e instanceof Error ? e.message : String(e)}`,
+        `Could not start recording: ${e instanceof Error ? e.message : String(e)}`,
         "error",
         5000,
       );
@@ -100,27 +100,27 @@ export function createCore(deps: CoreDeps): CoreHandle {
       if (!rec) return;
       const path = rec.outputPath;
       await rec.stop();
-      deps.toast("Transcrevendo…", "info", 1500);
+      deps.toast("Transcribing…", "info", 1500);
       try {
         const res = await prov.provider.transcribe(path, { language: prov.language });
         await deps.cleanupFile(path);
         if (!res.text) {
-          deps.toast("Nenhuma fala detectada.", "warning");
+          deps.toast("No speech detected.", "warning");
           return;
         }
         if (mode === "append") {
           await deps.insertAppend(res.text);
-          deps.toast("Texto inserido no composer.", "success");
+          deps.toast("Text inserted into composer.", "success");
         } else {
           await deps.insertSubmit(res.text);
-          deps.toast("Prompt enviado.", "success");
+          deps.toast("Prompt submitted.", "success");
         }
         succeeded = true;
         setPhase("success");
       } catch (e) {
         await deps.cleanupFile(path);
         const msg = e instanceof SttError ? e.message : e instanceof Error ? e.message : String(e);
-        deps.toast(`STT falhou: ${msg}`, "error", 6000);
+        deps.toast(`STT failed: ${msg}`, "error", 6000);
       }
     } finally {
       busy = false;
